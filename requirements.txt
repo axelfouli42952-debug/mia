@@ -1,4 +1,1 @@
 python-telegram-bot==20.5
-huggingface_hub
-httpx
-Pillow
