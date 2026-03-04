@@ -1,39 +1,49 @@
 import os
+import base64
+from io import BytesIO
 from telegram import Update
-from telegram.ext import ApplicationBuilder, ContextTypes, MessageHandler, filters
-from huggingface_hub import HfApi
+from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
+from huggingface_hub import InferenceClient
+from PIL import Image
 
-# Токены из окружения
-TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
-HF_TOKEN = os.getenv("HF_TOKEN")
+# === 1. Настройки ===
+TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN")  # твой Telegram Bot Token
+HF_TOKEN = os.environ.get("HF_TOKEN")  # твой Hugging Face Token
 
-# Инициализация Hugging Face API
-hf_api = HfApi()
-model_id = "stabilityai/stable-diffusion-2"  # можно менять на любой генератор фото
+# Инициализация клиента Hugging Face
+hf_client = InferenceClient(token=HF_TOKEN)
+MODEL_ID = "stabilityai/stable-diffusion-xl-base-1.0"
 
-async def flirt_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_text = update.message.text
+# === 2. Функция генерации изображения ===
+def generate_image(prompt: str) -> BytesIO:
+    """
+    Генерирует изображение по текстовому промпту через Hugging Face.
+    Возвращает BytesIO объект с PNG картинкой.
+    """
+    response = hf_client.text_to_image(prompt=prompt, model=MODEL_ID)
+    
+    # Модель возвращает base64 изображение
+    img_data = base64.b64decode(response["image_base64"])
+    image_bytes = BytesIO(img_data)
+    image_bytes.seek(0)
+    return image_bytes
 
-    # Простейший флирт
-    response_text = f"Ооо, {update.message.from_user.first_name}, ты только что сказал: '{user_text}' 😉"
+# === 3. Обработчик команды /photo ===
+async def photo_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user = update.effective_user.first_name
+    prompt = "A photorealistic portrait of a beautiful young woman, smiling, realistic lighting"  # базовый промпт
 
-    # Отправляем текст
-    await update.message.reply_text(response_text)
+    await update.message.reply_text(f"{user}, подожди, генерирую фото... 📸")
+    
+    try:
+        image_bytes = generate_image(prompt)
+        await update.message.reply_photo(photo=image_bytes)
+    except Exception as e:
+        await update.message.reply_text(f"Ошибка при генерации фото: {e}")
 
-    # Генерация фото через Hugging Face Inference API
-    prompt = "realistic portrait of a young woman, smiling, cinematic lighting"
-    output = hf_api.text_to_image(prompt=prompt, token=HF_TOKEN)  # вернёт bytes
-
-    # Сохраняем временно и отправляем
-    with open("girl.png", "wb") as f:
-        f.write(output)
-
-    await update.message.reply_photo(photo=open("girl.png", "rb"))
-
-# Настройка приложения
-app = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
-app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, flirt_photo))
-
-# Запуск
-print("Бот запущен...")
-app.run_polling()
+# === 4. Запуск бота ===
+if __name__ == "__main__":
+    app = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
+    app.add_handler(CommandHandler("photo", photo_handler))
+    print("Бот запущен...")
+    app.run_polling()
