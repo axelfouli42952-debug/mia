@@ -5,6 +5,8 @@ from telegram import Update
 from telegram.ext import ApplicationBuilder, MessageHandler, ContextTypes, filters
 
 # Токены
+import os
+
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 HF_TOKEN = os.getenv("HF_TOKEN")
 
@@ -59,3 +61,4 @@ if __name__ == "__main__":
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     print("Бот запущен…")
     app.run_polling()
+
