@@ -7,7 +7,8 @@ import io
 # Логи
 logging.basicConfig(level=logging.INFO)
 
-BOT_TOKEN = "YOUR_TELEGRAM_TOKEN"
+import os
+BOT_TOKEN = os.environ.get("BOT_TOKEN")
 HF_TOKEN = "YOUR_HF_TOKEN"
 
 HF_MODEL = "stabilityai/stable-diffusion-2-1"
@@ -50,3 +51,4 @@ app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 if __name__ == "__main__":
     print("Бот запущен!")
     app.run_polling()
+
