@@ -1,39 +1,48 @@
 import logging
+import requests
 from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes, MessageHandler, filters
-from huggingface_hub import InferenceClient
-
 import io
 
-# Настройка логов
+# Логи
 logging.basicConfig(level=logging.INFO)
 
-BOT_TOKEN = "YOUR_TELEGRAM_TOKEN"  # в Railway через Secrets
-HF_TOKEN = "YOUR_HF_TOKEN"         # в Railway через Secrets
+BOT_TOKEN = "YOUR_TELEGRAM_TOKEN"
+HF_TOKEN = "YOUR_HF_TOKEN"
 
-# Hugging Face клиент
-hf_client = InferenceClient(token=HF_TOKEN)
+HF_MODEL = "stabilityai/stable-diffusion-2-1"
 
 # Команда /start
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("Привет! Я могу сгенерировать фото девушки и флиртовать 😏\nНапиши что-нибудь, чтобы начать!")
+    await update.message.reply_text(
+        "Привет! Я могу сгенерировать фото девушки и флиртовать 😏\nНапиши что-нибудь, чтобы начать!"
+    )
+
+# Генерация фото через HF
+def generate_image(prompt: str):
+    url = f"https://api-inference.huggingface.co/models/{HF_MODEL}"
+    headers = {"Authorization": f"Bearer {HF_TOKEN}"}
+    data = {"inputs": prompt}
+    response = requests.post(url, headers=headers, json=data)
+    response.raise_for_status()
+    return io.BytesIO(response.content)
 
 # Обработка сообщений
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_text = update.message.text.lower()
     
-    # Генерация фото через Stable Diffusion
     prompt = "realistic photo of a young woman, smiling, studio lighting, 4k"
-    image_bytes = hf_client.text_to_image(prompt, model="stabilityai/stable-diffusion-2-1")
-    
-    # Отправляем фото
-    await update.message.reply_photo(photo=io.BytesIO(image_bytes), caption="Вот твоя девушка 😈")
-    
-    # Флирт-текст
+    try:
+        image_bytes = generate_image(prompt)
+        await update.message.reply_photo(photo=image_bytes, caption="Вот твоя девушка 😈")
+    except Exception as e:
+        await update.message.reply_text(f"Ошибка при генерации фото: {e}")
+        return
+
     flirt_text = "Привет 😏 Ты мне очень нравишься! Что делаем дальше?"
     await update.message.reply_text(flirt_text)
 
-# Основной запуск
+# Запуск бота
 app = ApplicationBuilder().token(BOT_TOKEN).build()
 app.add_handler(CommandHandler("start", start))
 app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
