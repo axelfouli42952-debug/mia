@@ -1,64 +1,68 @@
+# bot.py
 import os
-import requests
-
+import asyncio
 from telegram import Update
-from telegram.ext import ApplicationBuilder, MessageHandler, ContextTypes, filters
+from telegram.ext import ApplicationBuilder, ContextTypes, CommandHandler, MessageHandler, filters
+from httpx import AsyncClient
 
-# Токены
-import os
+# =========================
+# 1. Настройки
+# =========================
+BOT_TOKEN = os.environ.get("BOT_TOKEN")  # Твой токен Telegram
+MISTRAL_API_KEY = os.environ.get("MISTRAL_API_KEY")  # Твой ключ Mistral
+MISTRAL_MODEL = "mistralai/mistral-instruct-7B-v0.1"  # Пример модели
 
-BOT_TOKEN = os.getenv("BOT_TOKEN")
-HF_TOKEN = os.getenv("HF_TOKEN")
-
-MODEL_ID = "mistralai/Mistral-7B-Instruct-v0.3"
-
-# Функция запроса к Hugging Face Chat Completion API
-def get_mistral_reply(user_message: str) -> str:
-    url = f"https://api-inference.huggingface.co/models/{MODEL_ID}"
+# =========================
+# 2. Функция генерации текста с Mistral
+# =========================
+async def generate_flirt(prompt: str) -> str:
+    url = f"https://api.mistral.ai/v1/models/{MISTRAL_MODEL}/completions"
     headers = {
-        "Authorization": f"Bearer {HF_TOKEN}",
+        "Authorization": f"Bearer {MISTRAL_API_KEY}",
         "Content-Type": "application/json",
     }
-    
-    # Формируем сообщения для чат‑инференса
-    payload = {
-        "inputs": {
-            "messages": [
-                {"role": "system", "content": "Ты Мия — игривая, дерзкая, флиртующая девушка."},
-                {"role": "user", "content": user_message}
-            ]
-        },
-        "parameters": {
-            "max_new_tokens": 150,
-            "temperature": 0.9,
-            "top_p": 0.9
-        }
+    data = {
+        "input": prompt,
+        "max_tokens": 200,
+        "temperature": 0.8
     }
-    
-    response = requests.post(url, json=payload, headers=headers)
-    if response.status_code != 200:
-        return "Похоже, я не могу ответить сейчас 😅"
-    
-    data = response.json()
-    # Получаем ответ из структуры HF
-    try:
-        # В инференсе Mistral ответ лежит тут
-        return data["generated_text"]
-    except:
-        return "Что‑то пошло не так 😬"
 
-# Обработчик Telegram сообщений
+    async with AsyncClient() as client:
+        response = await client.post(url, headers=headers, json=data)
+        response.raise_for_status()
+        result = response.json()
+        # Mistral возвращает текст здесь
+        return result["completions"][0]["text"]
+
+# =========================
+# 3. Обработчики Telegram
+# =========================
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("Привет! Я могу немного флиртовать 😉 Напиши что-нибудь!")
+
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    text = update.message.text.strip()
-    
-    # Запрос к модели
-    reply = get_mistral_reply(text)
-    
+    user_text = update.message.text
+    # Формируем подсказку для бота
+    prompt = f"Флирт с пользователем: {user_text}\nОтвети игриво, но безопасно."
+    try:
+        reply = await generate_flirt(prompt)
+    except Exception as e:
+        reply = "Упс, что-то пошло не так 😅"
+        print("Ошибка генерации:", e)
+
     await update.message.reply_text(reply)
 
-if __name__ == "__main__":
+# =========================
+# 4. Основная функция
+# =========================
+def main():
     app = ApplicationBuilder().token(BOT_TOKEN).build()
+
+    app.add_handler(CommandHandler("start", start))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
-    print("Бот запущен…")
+
+    # Запуск бота через polling (можно на Railway)
     app.run_polling()
 
+if __name__ == "__main__":
+    main()
